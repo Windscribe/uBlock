@@ -945,7 +945,8 @@ vAPI.tabs.registerListeners();
             }
         }
 
-        vAPI.setIcon(tabId, state, badge, parts);
+        // TODO: use ads blocked # for WS badge
+        //  vAPI.setIcon(tabId, state, badge, parts);
     };
 
     // parts: bit 0 = icon
