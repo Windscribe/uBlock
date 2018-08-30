@@ -945,7 +945,7 @@ vAPI.tabs.registerListeners();
             }
         }
 
-        window.store.dispatch(window.actions.tabs.setBlockerCount({
+        window.store.dispatch(window.actions.tabs.assignIn({
             tabId,
             type: 'ads',
             count: pageStore.perLoadBlockedRequestCount
