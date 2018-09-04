@@ -952,6 +952,7 @@ vAPI.tabs.registerListeners();
             value: {
                 adsBlocked: pageStore.perLoadBlockedRequestCount
             }
+        }));
     };
 
     // parts: bit 0 = icon
