@@ -61,6 +61,12 @@ var onMessage = function(request, sender, callback) {
         return;
 
     case 'listsFromNetFilter':
+        console.log(111111111, request.compiledFilter,
+        request.rawFilter)
+        window.stuff = {
+          compiledFilter: request.compiledFilter,
+          rawFilter: request.rawFilter
+        }
         µb.staticFilteringReverseLookup.fromNetFilter(
             request.compiledFilter,
             request.rawFilter,
