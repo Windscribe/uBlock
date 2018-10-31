@@ -788,6 +788,10 @@ vAPI.tabs.onPopupUpdated = (function() {
 
         // Log only for when there was a hit against an actual filter (allow or block).
         // https://github.com/gorhill/uBlock/issues/2776
+
+
+        console.log(123, JSON.stringify(logData))
+
         if ( µb.logger.isEnabled() ) {
             µb.logger.writeOne(
                 popupType === 'popup' ? openerTabId : targetTabId,
