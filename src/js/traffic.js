@@ -158,6 +158,28 @@ var onBeforeRequest = function(details) {
 
     pageStore.journalAddRequest(requestContext.requestHostname, result);
 
+    if (pageStore.logData) {
+      µb.staticFilteringReverseLookup.fromNetFilter(
+          pageStore.logData.compiled,
+          pageStore.logData.raw,
+          result => {
+            // NOTE: I think these are all trackers. We can see which list they
+            // blocked from, but logData does not include blocking page level ads
+            // aka "cosmetic" ads
+            if (window.store) {
+              window.store.dispatch({
+                type: 'UBLOCK_ONBEFOREREQUEST_NETFILER_REVERSE_LOOKUP_RESULT',
+                payload: {
+                  tabId,
+                  result
+                }
+              })
+            }
+
+          }
+      );
+    }
+
     if ( µb.logger.isEnabled() ) {
         µb.logger.writeOne(
             tabId,
