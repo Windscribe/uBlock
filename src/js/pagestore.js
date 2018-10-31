@@ -621,14 +621,14 @@ PageStore.prototype.filterRequest = function(context) {
 
     // Dynamic URL filtering.
     var result = µb.sessionURLFiltering.evaluateZ(context.rootHostname, context.requestURL, requestType);
-    if ( result !== 0 && µb.logger.isEnabled() ) {
+    if ( result !== 0 ) {
         this.logData = µb.sessionURLFiltering.toLogData();
     }
 
     // Dynamic hostname/type filtering.
     if ( result === 0 && µb.userSettings.advancedUserEnabled ) {
         result = µb.sessionFirewall.evaluateCellZY(context.rootHostname, context.requestHostname, requestType);
-        if ( result !== 0 && result !== 3 && µb.logger.isEnabled() ) {
+        if ( result !== 0 && result !== 3 ) {
             this.logData = µb.sessionFirewall.toLogData();
         }
     }
@@ -636,7 +636,7 @@ PageStore.prototype.filterRequest = function(context) {
     // Static filtering has lowest precedence.
     if ( result === 0 || result === 3 ) {
         result = µb.staticNetFilteringEngine.matchString(context);
-        if ( result !== 0 && µb.logger.isEnabled() ) {
+        if ( result !== 0 ) {
             this.logData = µb.staticNetFilteringEngine.toLogData();
         }
     }
