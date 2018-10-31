@@ -945,13 +945,16 @@ vAPI.tabs.registerListeners();
             }
         }
 
+        console.log(123, badge, pageStore)
+
         // TODO: use ads blocked # for WS badge
         //  vAPI.setIcon(tabId, state, badge, parts);
         if (window.store) {
           window.store.dispatch(window.actions.tabs.produce(state => {
-            Object.assign(state[tabId], {
+            state[tabId] = {
+              ...state[tabId],
               adsBlocked: pageStore.perLoadBlockedRequestCount
-            })
+            }
           }));
         }
     };
