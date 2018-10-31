@@ -159,7 +159,7 @@ var onBeforeRequest = function(details) {
     pageStore.journalAddRequest(requestContext.requestHostname, result);
 
     if (pageStore.logData) {
-      console.log(123, pageStore.logData)
+      console.log('onBeforeRequest', pageStore.logData)
     }
 
     if ( µb.logger.isEnabled() ) {
@@ -303,6 +303,10 @@ var onBeforeRootFrameRequest = function(details) {
         pageStore.journalAddRequest(requestHostname, result);
     }
 
+    if (logData) {
+      console.log('onBeforeRootFrameRequest', logData)
+    }
+
     if ( logEnabled ) {
         µb.logger.writeOne(
             tabId,
@@ -431,6 +435,10 @@ var onBeforeBehindTheSceneRequest = function(details) {
     }
 
     pageStore.journalAddRequest(context.requestHostname, result);
+
+    if (pageStore.logData) {
+      console.log('onBeforeBehindTheSceneRequest', pageStore.logData)
+    }
 
     if ( µb.logger.isEnabled() ) {
         µb.logger.writeOne(
