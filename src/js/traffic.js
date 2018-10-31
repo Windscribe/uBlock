@@ -158,6 +158,10 @@ var onBeforeRequest = function(details) {
 
     pageStore.journalAddRequest(requestContext.requestHostname, result);
 
+    if (pageStore.logData) {
+      console.log(123, pageStore.logData)
+    }
+
     if ( µb.logger.isEnabled() ) {
         µb.logger.writeOne(
             tabId,
