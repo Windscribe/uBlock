@@ -302,7 +302,6 @@ PageStore.prototype.init = function(tabId, context) {
     ) === true;
     if (
         this.noCosmeticFiltering &&
-        µb.logger.isEnabled() &&
         context === 'tabCommitted'
     ) {
         µb.logger.writeOne(
@@ -325,7 +324,6 @@ PageStore.prototype.init = function(tabId, context) {
         this.noGenericCosmeticFiltering = result === 2;
         if (
             result !== 0 &&
-            µb.logger.isEnabled() &&
             context === 'tabCommitted'
         ) {
             µb.logger.writeOne(
@@ -665,9 +663,7 @@ PageStore.prototype.collapsibleResources = {
 
 PageStore.prototype.filterCSPReport = function(context) {
     if ( µb.hnSwitches.evaluateZ('no-csp-reports', context.requestHostname) ) {
-        if ( µb.logger.isEnabled() ) {
-            this.logData = µb.hnSwitches.toLogData();
-        }
+        this.logData = µb.hnSwitches.toLogData();
         return 1;
     }
     // https://github.com/gorhill/uBlock/issues/3140
@@ -677,13 +673,11 @@ PageStore.prototype.filterCSPReport = function(context) {
         vAPI.net.nativeCSPReportFiltering !== true &&
         this.internalRedirectionCount !== 0
     ) {
-        if ( µb.logger.isEnabled() ) {
-            this.logData = {
-                result: 1,
-                source: 'global',
-                raw: 'no-spurious-csp-report'
-            };
-        }
+        this.logData = {
+            result: 1,
+            source: 'global',
+            raw: 'no-spurious-csp-report'
+        };
         return 1;
     }
     return 0;
@@ -696,9 +690,7 @@ PageStore.prototype.filterFont = function(context) {
         this.remoteFontCount += 1;
     }
     if ( µb.hnSwitches.evaluateZ('no-remote-fonts', context.rootHostname) !== false ) {
-        if ( µb.logger.isEnabled() ) {
-            this.logData = µb.hnSwitches.toLogData();
-        }
+        this.logData = µb.hnSwitches.toLogData();
         return 1;
     }
     return 0;
@@ -729,9 +721,7 @@ PageStore.prototype.filterLargeMediaElement = function(size) {
         );
     }
 
-    if ( µb.logger.isEnabled() ) {
-        this.logData = µb.hnSwitches.toLogData();
-    }
+    this.logData = µb.hnSwitches.toLogData();
 
     return 1;
 };
