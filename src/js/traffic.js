@@ -159,7 +159,13 @@ var onBeforeRequest = function(details) {
     pageStore.journalAddRequest(requestContext.requestHostname, result);
 
     if (pageStore.logData) {
-      console.log('onBeforeRequest', pageStore.logData)
+      µb.staticFilteringReverseLookup.fromNetFilter(
+          pageStore.logData.compiled,
+          pageStore.logData.raw,
+          d => {
+            console.log(123123, d)
+          }
+      );
     }
 
     if ( µb.logger.isEnabled() ) {
