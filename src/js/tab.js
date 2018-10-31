@@ -947,12 +947,14 @@ vAPI.tabs.registerListeners();
 
         // TODO: use ads blocked # for WS badge
         //  vAPI.setIcon(tabId, state, badge, parts);
-        window.store.dispatch(window.actions.tabs.assigndeep({
-            key: tabId,
-            value: {
-                adsBlocked: pageStore.perLoadBlockedRequestCount
+        if (window.store) {
+          window.store.dispatch(window.actions.tabs.produce(state => {
+            state[tabId] = {
+              ...state[tabId],
+              adsBlocked: pageStore.perLoadBlockedRequestCount
             }
-        }));
+          }));
+        }
     };
 
     // parts: bit 0 = icon
