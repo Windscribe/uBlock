@@ -949,9 +949,8 @@ vAPI.tabs.registerListeners();
         //  vAPI.setIcon(tabId, state, badge, parts);
         if (window.store) {
           window.store.dispatch(window.actions.tabs.produce(state => {
-            state[tabId] = {
-              ...state[tabId],
-              adsBlocked: pageStore.perLoadBlockedRequestCount
+            if (state[tabId]) {
+                state[tabId].adsBlocked = pageStore.perLoadBlockedRequestCount
             }
           }));
         }

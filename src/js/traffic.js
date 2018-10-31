@@ -168,7 +168,7 @@ var onBeforeRequest = function(details) {
             // aka "cosmetic" ads
             if (window.store) {
               window.store.dispatch({
-                type: 'UBLOCK_ONBEFOREREQUEST_NETFILER_REVERSE_LOOKUP_RESULT',
+                type: 'tabs_UBLOCK_ONBEFOREREQUEST_NETFILER_REVERSE_LOOKUP_RESULT',
                 payload: {
                   tabId,
                   result
