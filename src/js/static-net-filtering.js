@@ -20,7 +20,7 @@
 */
 
 /* jshint bitwise: false */
-/* global punycode, HNTrieBuilder */
+/* global punycode, hnTrieManager */
 
 'use strict';
 
@@ -30,30 +30,28 @@
 
 /******************************************************************************/
 
-var µb = µBlock;
+const µb = µBlock;
 
 // fedcba9876543210
-// |     |    | |||
-// |     |    | |||
-// |     |    | |||
-// |     |    | |||
-// |     |    | ||+---- bit    0: [BlockAction | AllowAction]
-// |     |    | |+----- bit    1: `important`
-// |     |    | +------ bit 2- 3: party [0 - 3]
-// |     |    +-------- bit 4- 8: type [0 - 31]
-// |     +------------- bit 9-14: unused
-// +------------------- bit   15: bad filter
+//       |    | |||
+//       |    | |||
+//       |    | |||
+//       |    | |||
+//       |    | ||+---- bit    0: [BlockAction | AllowAction]
+//       |    | |+----- bit    1: `important`
+//       |    | +------ bit 2- 3: party [0 - 3]
+//       |    +-------- bit 4- 8: type [0 - 31]
+//       +------------- bit 9-15: unused
 
-var BlockAction = 0 << 0;
-var AllowAction = 1 << 0;
-var Important   = 1 << 1;
-var AnyParty    = 0 << 2;
-var FirstParty  = 1 << 2;
-var ThirdParty  = 2 << 2;
-var BadFilter   = 1 << 15;
+const BlockAction = 0 << 0;
+const AllowAction = 1 << 0;
+const Important   = 1 << 1;
+const AnyParty    = 0 << 2;
+const FirstParty  = 1 << 2;
+const ThirdParty  = 2 << 2;
 
-var AnyType = 0 << 4;
-var typeNameToTypeValue = {
+const AnyType = 0 << 4;
+const typeNameToTypeValue = {
            'no_type':  0 << 4,
         'stylesheet':  1 << 4,
              'image':  2 << 4,
@@ -77,9 +75,9 @@ var typeNameToTypeValue = {
             'webrtc': 19 << 4,
        'unsupported': 20 << 4
 };
-var otherTypeBitValue = typeNameToTypeValue.other;
+const otherTypeBitValue = typeNameToTypeValue.other;
 
-var typeValueToTypeName = {
+const typeValueToTypeName = {
      1: 'stylesheet',
      2: 'image',
      3: 'object',
@@ -102,16 +100,16 @@ var typeValueToTypeName = {
     20: 'unsupported'
 };
 
-var BlockAnyTypeAnyParty = BlockAction | AnyType | AnyParty;
-var BlockAnyType = BlockAction | AnyType;
-var BlockAnyParty = BlockAction | AnyParty;
+const BlockAnyTypeAnyParty = BlockAction | AnyType | AnyParty;
+const BlockAnyType = BlockAction | AnyType;
+const BlockAnyParty = BlockAction | AnyParty;
 
-var AllowAnyTypeAnyParty = AllowAction | AnyType | AnyParty;
-var AllowAnyType = AllowAction | AnyType;
-var AllowAnyParty = AllowAction | AnyParty;
+const AllowAnyTypeAnyParty = AllowAction | AnyType | AnyParty;
+const AllowAnyType = AllowAction | AnyType;
+const AllowAnyParty = AllowAction | AnyParty;
 
-var genericHideException = AllowAction | AnyParty | typeNameToTypeValue.generichide,
-    genericHideImportant = BlockAction | AnyParty | typeNameToTypeValue.generichide | Important;
+const genericHideException = AllowAction | AnyParty | typeNameToTypeValue.generichide,
+      genericHideImportant = BlockAction | AnyParty | typeNameToTypeValue.generichide | Important;
 
 // ABP filters: https://adblockplus.org/en/filters
 // regex tester: http://regex101.com/
@@ -121,67 +119,23 @@ var genericHideException = AllowAction | AnyParty | typeNameToTypeValue.generich
 // See the following as short-lived registers, used during evaluation. They are
 // valid until the next evaluation.
 
-var pageHostnameRegister = '',
+let pageHostnameRegister = '',
     requestHostnameRegister = '';
 //var filterRegister = null;
 //var categoryRegister = '';
 
-/******************************************************************************/
-
-var histogram = function() {};
-/*
-histogram = function(label, categories) {
-    var h = [],
-        categoryBucket;
-    for ( var k in categories ) {
-        // No need for hasOwnProperty() here: there is no prototype chain.
-        categoryBucket = categories[k];
-        for ( var kk in categoryBucket ) {
-            // No need for hasOwnProperty() here: there is no prototype chain.
-            filterBucket = categoryBucket[kk];
-            h.push({
-                k: k.charCodeAt(0).toString(2) + ' ' + kk,
-                n: filterBucket instanceof FilterBucket ? filterBucket.filters.length : 1
-            });
-        }
-    }
-
-    console.log('Histogram %s', label);
-
-    var total = h.length;
-    h.sort(function(a, b) { return b.n - a.n; });
-
-    // Find indices of entries of interest
-    var target = 2;
-    for ( var i = 0; i < total; i++ ) {
-        if ( h[i].n === target ) {
-            console.log('\tEntries with only %d filter(s) start at index %s (key = "%s")', target, i, h[i].k);
-            target -= 1;
-        }
-    }
-
-    h = h.slice(0, 50);
-
-    h.forEach(function(v) {
-        console.log('\tkey=%s  count=%d', v.k, v.n);
-    });
-    console.log('\tTotal buckets count: %d', total);
-};
-*/
-/******************************************************************************/
-
 // Local helpers
 
 // Be sure to not confuse 'example.com' with 'anotherexample.com'
-var isFirstParty = function(domain, hostname) {
+const isFirstParty = function(domain, hostname) {
     return hostname.endsWith(domain) &&
           (hostname.length === domain.length ||
            hostname.charCodeAt(hostname.length - domain.length - 1) === 0x2E /* '.' */);
 };
 
-var normalizeRegexSource = function(s) {
+const normalizeRegexSource = function(s) {
     try {
-        var re = new RegExp(s);
+        const re = new RegExp(s);
         return re.source;
     } catch (ex) {
         normalizeRegexSource.message = ex.toString();
@@ -189,25 +143,24 @@ var normalizeRegexSource = function(s) {
     return '';
 };
 
-var rawToRegexStr = function(s, anchor) {
-    var me = rawToRegexStr;
+const rawToRegexStr = function(s, anchor) {
     // https://www.loggly.com/blog/five-invaluable-techniques-to-improve-regex-performance/
     // https://developer.mozilla.org/en/docs/Web/JavaScript/Guide/Regular_Expressions
     // Also: remove leading/trailing wildcards -- there is no point.
-    var reStr = s.replace(me.escape1, '\\$&')
-                 .replace(me.escape2, '(?:[^%.0-9a-z_-]|$)')
-                 .replace(me.escape3, '')
-                 .replace(me.escape4, '[^ ]*?');
-    if ( anchor & 0x4 ) {
+    let reStr = s.replace(rawToRegexStr.escape1, '\\$&')
+                 .replace(rawToRegexStr.escape2, '(?:[^%.0-9a-z_-]|$)')
+                 .replace(rawToRegexStr.escape3, '')
+                 .replace(rawToRegexStr.escape4, '[^ ]*?');
+    if ( anchor & 0b100 ) {
         reStr = (
-                    reStr.startsWith('\\.') ?
-                        rawToRegexStr.reTextHostnameAnchor2 :
-                        rawToRegexStr.reTextHostnameAnchor1
-                ) + reStr;
-    } else if ( anchor & 0x2 ) {
+            reStr.startsWith('\\.') ?
+                rawToRegexStr.reTextHostnameAnchor2 :
+                rawToRegexStr.reTextHostnameAnchor1
+        ) + reStr;
+    } else if ( anchor & 0b010 ) {
         reStr = '^' + reStr;
     }
-    if ( anchor & 0x1 ) {
+    if ( anchor & 0b001 ) {
         reStr += '$';
     }
     return reStr;
@@ -219,16 +172,33 @@ rawToRegexStr.escape4 = /\*/g;
 rawToRegexStr.reTextHostnameAnchor1 = '^[a-z-]+://(?:[^/?#]+\\.)?';
 rawToRegexStr.reTextHostnameAnchor2 = '^[a-z-]+://(?:[^/?#]+)?';
 
-var filterFingerprinter = µb.CompiledLineWriter.fingerprint;
+// https://github.com/uBlockOrigin/uAssets/issues/4083#issuecomment-436914727
+const rawToPlainStr = function(s, anchor) {
+    if (
+        anchor === 0 &&
+        s.charCodeAt(0) === 0x2F /* '/' */ &&
+        s.length > 2 &&
+        s.charCodeAt(s.length-1) === 0x2F /* '/' */
+    ) {
+        s = s + '*';
+    }
+    return s;
+};
 
-var toLogDataInternal = function(categoryBits, tokenHash, filter) {
+const filterDataSerialize = µb.CompiledLineIO.serialize;
+
+const toLogDataInternal = function(categoryBits, tokenHash, filter) {
     if ( filter === null ) { return undefined; }
-    var logData = filter.logData();
-    logData.compiled = filterFingerprinter([ categoryBits, tokenHash, logData.compiled ]);
+    let logData = filter.logData();
+    logData.compiled = filterDataSerialize([
+        categoryBits,
+        tokenHash,
+        logData.compiled
+    ]);
     if ( categoryBits & 0x001 ) {
         logData.raw = '@@' + logData.raw;
     }
-    var opts = [];
+    let opts = [];
     if ( categoryBits & 0x002 ) {
         opts.push('important');
     }
@@ -237,7 +207,7 @@ var toLogDataInternal = function(categoryBits, tokenHash, filter) {
     } else if ( categoryBits & 0x004 ) {
         opts.push('first-party');
     }
-    var type = categoryBits & 0x1F0;
+    let type = categoryBits & 0x1F0;
     if ( type !== 0 && type !== typeNameToTypeValue.data ) {
         opts.push(typeValueToTypeName[type >>> 4]);
     }
@@ -251,7 +221,7 @@ var toLogDataInternal = function(categoryBits, tokenHash, filter) {
 };
 
 // First character of match must be within the hostname part of the url.
-var isHnAnchored = function(url, matchStart) {
+const isHnAnchored = function(url, matchStart) {
     var hnStart = url.indexOf('://');
     if ( hnStart === -1 ) { return false; }
     hnStart += 3;
@@ -264,9 +234,9 @@ var isHnAnchored = function(url, matchStart) {
     return url.charCodeAt(matchStart - 1) === 0x2E;
 };
 
-var reURLPostHostnameAnchors = /[\/?#]/;
+const reURLPostHostnameAnchors = /[\/?#]/;
 
-var arrayStrictEquals = function(a, b) {
+const arrayStrictEquals = function(a, b) {
     var n = a.length;
     if ( n !== b.length ) { return false; }
     var isArray, x, y;
@@ -293,26 +263,22 @@ var arrayStrictEquals = function(a, b) {
 
 **/
 
-var filterClasses = [],
-    filterClassIdGenerator = 0;
+const filterClasses = [];
+let   filterClassIdGenerator = 0;
 
-var registerFilterClass = function(ctor) {
-    var fid = filterClassIdGenerator++;
+const registerFilterClass = function(ctor) {
+    let fid = filterClassIdGenerator++;
     ctor.fid = ctor.prototype.fid = fid;
     filterClasses[fid] = ctor;
-    //console.log(ctor.name, fid);
 };
 
-var filterFromCompiledData = function(args) {
-    //filterClassHistogram.set(fid, (filterClassHistogram.get(fid) || 0) + 1);
+const filterFromCompiledData = function(args) {
     return filterClasses[args[0]].load(args);
 };
 
-//var filterClassHistogram = new Map();
-
 /******************************************************************************/
 
-var FilterTrue = function() {
+const FilterTrue = function() {
 };
 
 FilterTrue.prototype.match = function() {
@@ -343,7 +309,7 @@ registerFilterClass(FilterTrue);
 
 /******************************************************************************/
 
-var FilterPlain = function(s, tokenBeg) {
+const FilterPlain = function(s, tokenBeg) {
     this.s = s;
     this.tokenBeg = tokenBeg;
 };
@@ -354,8 +320,8 @@ FilterPlain.prototype.match = function(url, tokenBeg) {
 
 FilterPlain.prototype.logData = function() {
     return {
-        raw: this.s,
-        regex: rawToRegexStr(this.s),
+        raw: rawToPlainStr(this.s, 0),
+        regex: rawToRegexStr(this.s, 0),
         compiled: this.compile()
     };
 };
@@ -376,7 +342,7 @@ registerFilterClass(FilterPlain);
 
 /******************************************************************************/
 
-var FilterPlainPrefix0 = function(s) {
+const FilterPlainPrefix0 = function(s) {
     this.s = s;
 };
 
@@ -387,7 +353,7 @@ FilterPlainPrefix0.prototype.match = function(url, tokenBeg) {
 FilterPlainPrefix0.prototype.logData = function() {
     return {
         raw: this.s,
-        regex: rawToRegexStr(this.s),
+        regex: rawToRegexStr(this.s, 0),
         compiled: this.compile()
     };
 };
@@ -408,7 +374,7 @@ registerFilterClass(FilterPlainPrefix0);
 
 /******************************************************************************/
 
-var FilterPlainPrefix1 = function(s) {
+const FilterPlainPrefix1 = function(s) {
     this.s = s;
 };
 
@@ -418,8 +384,8 @@ FilterPlainPrefix1.prototype.match = function(url, tokenBeg) {
 
 FilterPlainPrefix1.prototype.logData = function() {
     return {
-        raw: this.s,
-        regex: rawToRegexStr(this.s),
+        raw: rawToPlainStr(this.s, 0),
+        regex: rawToRegexStr(this.s, 0),
         compiled: this.compile()
     };
 };
@@ -440,7 +406,7 @@ registerFilterClass(FilterPlainPrefix1);
 
 /******************************************************************************/
 
-var FilterPlainHostname = function(s) {
+const FilterPlainHostname = function(s) {
     this.s = s;
 };
 
@@ -454,7 +420,7 @@ FilterPlainHostname.prototype.match = function() {
 FilterPlainHostname.prototype.logData = function() {
     return {
         raw: '||' + this.s + '^',
-        regex: rawToRegexStr(this.s + '^'),
+        regex: rawToRegexStr(this.s + '^', 0),
         compiled: this.compile()
     };
 };
@@ -475,7 +441,7 @@ registerFilterClass(FilterPlainHostname);
 
 /******************************************************************************/
 
-var FilterPlainLeftAnchored = function(s) {
+const FilterPlainLeftAnchored = function(s) {
     this.s = s;
 };
 
@@ -486,7 +452,7 @@ FilterPlainLeftAnchored.prototype.match = function(url) {
 FilterPlainLeftAnchored.prototype.logData = function() {
     return {
         raw: '|' + this.s,
-        regex: rawToRegexStr(this.s, 0x2),
+        regex: rawToRegexStr(this.s, 0b010),
         compiled: this.compile()
     };
 };
@@ -507,7 +473,7 @@ registerFilterClass(FilterPlainLeftAnchored);
 
 /******************************************************************************/
 
-var FilterPlainRightAnchored = function(s) {
+const FilterPlainRightAnchored = function(s) {
     this.s = s;
 };
 
@@ -518,7 +484,7 @@ FilterPlainRightAnchored.prototype.match = function(url) {
 FilterPlainRightAnchored.prototype.logData = function() {
     return {
         raw: this.s + '|',
-        regex: rawToRegexStr(this.s, 0x1),
+        regex: rawToRegexStr(this.s, 0b001),
         compiled: this.compile()
     };
 };
@@ -539,7 +505,7 @@ registerFilterClass(FilterPlainRightAnchored);
 
 /******************************************************************************/
 
-var FilterExactMatch = function(s) {
+const FilterExactMatch = function(s) {
     this.s = s;
 };
 
@@ -550,7 +516,7 @@ FilterExactMatch.prototype.match = function(url) {
 FilterExactMatch.prototype.logData = function() {
     return {
         raw: '|' + this.s + '|',
-        regex: rawToRegexStr(this.s, 0x3),
+        regex: rawToRegexStr(this.s, 0b011),
         compiled: this.compile()
     };
 };
@@ -571,7 +537,7 @@ registerFilterClass(FilterExactMatch);
 
 /******************************************************************************/
 
-var FilterPlainHnAnchored = function(s) {
+const FilterPlainHnAnchored = function(s) {
     this.s = s;
 };
 
@@ -583,7 +549,7 @@ FilterPlainHnAnchored.prototype.match = function(url, tokenBeg) {
 FilterPlainHnAnchored.prototype.logData = function() {
     return {
         raw: '||' + this.s,
-        regex: rawToRegexStr(this.s),
+        regex: rawToRegexStr(this.s, 0),
         compiled: this.compile()
     };
 };
@@ -604,7 +570,7 @@ registerFilterClass(FilterPlainHnAnchored);
 
 /******************************************************************************/
 
-var FilterGeneric = function(s, anchor) {
+const FilterGeneric = function(s, anchor) {
     this.s = s;
     this.anchor = anchor;
 };
@@ -620,7 +586,7 @@ FilterGeneric.prototype.match = function(url) {
 
 FilterGeneric.prototype.logData = function() {
     var out = {
-        raw: this.s,
+        raw: rawToPlainStr(this.s, this.anchor),
         regex: this.re.source,
         compiled: this.compile()
     };
@@ -649,7 +615,7 @@ registerFilterClass(FilterGeneric);
 
 /******************************************************************************/
 
-var FilterGenericHnAnchored = function(s) {
+const FilterGenericHnAnchored = function(s) {
     this.s = s;
 };
 
@@ -666,7 +632,7 @@ FilterGenericHnAnchored.prototype.match = function(url) {
 FilterGenericHnAnchored.prototype.logData = function() {
     var out = {
         raw: '||' + this.s,
-        regex: rawToRegexStr(this.s, this.anchor & ~0x4),
+        regex: rawToRegexStr(this.s, this.anchor & 0b001),
         compiled: this.compile()
     };
     return out;
@@ -688,7 +654,7 @@ registerFilterClass(FilterGenericHnAnchored);
 
 /******************************************************************************/
 
-var FilterGenericHnAndRightAnchored = function(s) {
+const FilterGenericHnAndRightAnchored = function(s) {
     FilterGenericHnAnchored.call(this, s);
 };
 
@@ -728,7 +694,7 @@ registerFilterClass(FilterGenericHnAndRightAnchored);
 
 /******************************************************************************/
 
-var FilterRegex = function(s) {
+const FilterRegex = function(s) {
     this.re = s;
 };
 
@@ -769,7 +735,7 @@ registerFilterClass(FilterRegex);
 
 // Filtering according to the origin.
 
-var FilterOrigin = function() {
+const FilterOrigin = function() {
 };
 
 FilterOrigin.prototype.wrapped = {
@@ -812,7 +778,7 @@ FilterOrigin.prototype.compile = function() {
 
 // *** start of specialized origin matchers
 
-var FilterOriginHit = function(domainOpt) {
+const FilterOriginHit = function(domainOpt) {
     FilterOrigin.call(this);
     this.hostname = domainOpt;
 };
@@ -838,7 +804,7 @@ FilterOriginHit.prototype = Object.create(FilterOrigin.prototype, {
 
 //
 
-var FilterOriginMiss = function(domainOpt) {
+const FilterOriginMiss = function(domainOpt) {
     FilterOrigin.call(this);
     this.hostname = domainOpt.slice(1);
 };
@@ -857,14 +823,15 @@ FilterOriginMiss.prototype = Object.create(FilterOrigin.prototype, {
             var needle = this.hostname, haystack = pageHostnameRegister;
             if ( haystack.endsWith(needle) === false ) { return true; }
             var offset = haystack.length - needle.length;
-            return offset !== 0 && haystack.charCodeAt(offset - 1) !== 0x2E /* '.' */;
+            return offset !== 0 &&
+                   haystack.charCodeAt(offset - 1) !== 0x2E /* '.' */;
         }
     },
 });
 
 //
 
-var FilterOriginHitSet = function(domainOpt) {
+const FilterOriginHitSet = function(domainOpt) {
     FilterOrigin.call(this);
     this.domainOpt = domainOpt.length < 128
         ? domainOpt
@@ -886,17 +853,17 @@ FilterOriginHitSet.prototype = Object.create(FilterOrigin.prototype, {
     },
     matchOrigin: {
         value: function() {
-            if ( this.oneOf === null ) {
-                this.oneOf = HNTrieBuilder.fromDomainOpt(this.domainOpt);
+            if ( hnTrieManager.isValidRef(this.oneOf) === false ) {
+                this.oneOf = hnTrieManager.fromDomainOpt(this.domainOpt);
             }
-            return this.oneOf.matches(pageHostnameRegister);
+            return this.oneOf.matches(pageHostnameRegister) === 1;
         }
     },
 });
 
 //
 
-var FilterOriginMissSet = function(domainOpt) {
+const FilterOriginMissSet = function(domainOpt) {
     FilterOrigin.call(this);
     this.domainOpt = domainOpt.length < 128
         ? domainOpt
@@ -918,17 +885,19 @@ FilterOriginMissSet.prototype = Object.create(FilterOrigin.prototype, {
     },
     matchOrigin: {
         value: function() {
-            if ( this.noneOf === null ) {
-                this.noneOf = HNTrieBuilder.fromDomainOpt(this.domainOpt.replace(/~/g, ''));
+            if ( hnTrieManager.isValidRef(this.noneOf) === false ) {
+                this.noneOf = hnTrieManager.fromDomainOpt(
+                    this.domainOpt.replace(/~/g, '')
+                );
             }
-            return this.noneOf.matches(pageHostnameRegister) === false;
+            return this.noneOf.matches(pageHostnameRegister) === 0;
         }
     },
 });
 
 //
 
-var FilterOriginMixedSet = function(domainOpt) {
+const FilterOriginMixedSet = function(domainOpt) {
     FilterOrigin.call(this);
     this.domainOpt = domainOpt.length < 128
         ? domainOpt
@@ -949,20 +918,16 @@ FilterOriginMixedSet.prototype = Object.create(FilterOrigin.prototype, {
     },
     init: {
         value: function() {
-            var oneOf = [], noneOf = [],
-                hostnames = this.domainOpt.split('|'),
-                i = hostnames.length,
-                hostname;
-            while ( i-- ) {
-                hostname = hostnames[i];
+            let oneOf = [], noneOf = [];
+            for ( let hostname of this.domainOpt.split('|') ) {
                 if ( hostname.charCodeAt(0) === 0x7E /* '~' */ ) {
                     noneOf.push(hostname.slice(1));
                 } else {
                     oneOf.push(hostname);
                 }
             }
-            this.oneOf = HNTrieBuilder.fromIterable(oneOf);
-            this.noneOf = HNTrieBuilder.fromIterable(noneOf);
+            this.oneOf = hnTrieManager.fromIterable(oneOf);
+            this.noneOf = hnTrieManager.fromIterable(noneOf);
         }
     },
     toDomainOpt: {
@@ -972,10 +937,12 @@ FilterOriginMixedSet.prototype = Object.create(FilterOrigin.prototype, {
     },
     matchOrigin: {
         value: function() {
-            if ( this.oneOf === null ) { this.init(); }
-            var needle = pageHostnameRegister;
-            return this.oneOf.matches(needle) &&
-                   this.noneOf.matches(needle) === false;
+            if ( hnTrieManager.isValidRef(this.oneOf) === false ) {
+                this.init();
+            }
+            let needle = pageHostnameRegister;
+            return this.oneOf.matches(needle) === 1 &&
+                   this.noneOf.matches(needle) === 0;
         }
     },
 });
@@ -1027,7 +994,7 @@ registerFilterClass(FilterOrigin);
 
 /******************************************************************************/
 
-var FilterDataHolder = function(dataType, dataStr) {
+const FilterDataHolder = function(dataType, dataStr) {
     this.dataType = dataType;
     this.dataStr = dataStr;
     this.wrapped = undefined;
@@ -1070,7 +1037,7 @@ registerFilterClass(FilterDataHolder);
 
 // Helper class for storing instances of FilterDataHolder.
 
-var FilterDataHolderEntry = function(categoryBits, tokenHash, fdata) {
+const FilterDataHolderEntry = function(categoryBits, tokenHash, fdata) {
     this.categoryBits = categoryBits;
     this.tokenHash = tokenHash;
     this.filter = filterFromCompiledData(fdata);
@@ -1093,7 +1060,7 @@ FilterDataHolderEntry.load = function(data) {
 
 // Dictionary of hostnames
 //
-var FilterHostnameDict = function() {
+const FilterHostnameDict = function() {
     this.h = ''; // short-lived register
     this.dict = new Set();
 };
@@ -1133,7 +1100,7 @@ FilterHostnameDict.prototype.match = function() {
 FilterHostnameDict.prototype.logData = function() {
     return {
         raw: '||' + this.h + '^',
-        regex: rawToRegexStr(this.h) + '(?:[^%.0-9a-z_-]|$)',
+        regex: rawToRegexStr(this.h, 0) + '(?:[^%.0-9a-z_-]|$)',
         compiled: this.h
     };
 };
@@ -1184,7 +1151,7 @@ registerFilterClass(FilterHostnameDict);
 
 /******************************************************************************/
 
-var FilterPair = function(a, b) {
+const FilterPair = function(a, b) {
     this.f1 = a;
     this.f2 = b;
     this.f = null;
@@ -1263,7 +1230,7 @@ registerFilterClass(FilterPair);
 
 /******************************************************************************/
 
-var FilterBucket = function(a, b, c) {
+const FilterBucket = function(a, b, c) {
     this.filters = [];
     this.f = null;
     if ( a !== undefined ) {
@@ -1361,7 +1328,7 @@ registerFilterClass(FilterBucket);
 /******************************************************************************/
 /******************************************************************************/
 
-var FilterParser = function() {
+const FilterParser = function() {
     this.cantWebsocket = vAPI.cantWebsocket;
     this.reBadDomainOptChars = /[*+?^${}()[\]\\]/;
     this.reHostnameRule1 = /^[0-9a-z][0-9a-z.-]*[0-9a-z]$/i;
@@ -1424,7 +1391,7 @@ FilterParser.prototype.toNormalizedType = {
 FilterParser.prototype.reset = function() {
     this.action = BlockAction;
     this.anchor = 0;
-    this.badFilter = 0;
+    this.badFilter = false;
     this.dataType = undefined;
     this.dataStr = undefined;
     this.elemHiding = false;
@@ -1594,7 +1561,7 @@ FilterParser.prototype.parseOptions = function(s) {
         }
         // https://github.com/uBlockOrigin/uAssets/issues/192
         if ( opt === 'badfilter' ) {
-            this.badFilter = BadFilter;
+            this.badFilter = true;
             continue;
         }
         // Unrecognized filter option: ignore whole filter.
@@ -1979,7 +1946,7 @@ FilterParser.prototype.makeToken = function() {
 /******************************************************************************/
 /******************************************************************************/
 
-var FilterContainer = function() {
+const FilterContainer = function() {
     this.reIsGeneric = /[\^\*]/;
     this.filterParser = new FilterParser();
     this.urlTokenizer = µb.urlTokenizer;
@@ -2000,16 +1967,14 @@ FilterContainer.prototype.reset = function() {
     this.allowFilterCount = 0;
     this.blockFilterCount = 0;
     this.discardedCount = 0;
+    this.goodFilters = new Set();
     this.badFilters = new Set();
-    this.duplicateBuster = new Set();
     this.categories = new Map();
     this.dataFilters = new Map();
     this.filterParser.reset();
 
-    // Reuse filter instances whenever possible at load time.
-    this.fclassLast = null;
-    this.fdataLast = null;
-    this.filterLast = null;
+    // This will invalidate all hn tries throughout uBO:
+    hnTrieManager.reset();
 
     // Runtime registers
     this.cbRegister = undefined;
@@ -2020,18 +1985,94 @@ FilterContainer.prototype.reset = function() {
 /******************************************************************************/
 
 FilterContainer.prototype.freeze = function() {
-    histogram('allFilters', this.categories);
-    this.removeBadFilters();
-    this.duplicateBuster = new Set();
+    let filterPairId = FilterPair.fid,
+        filterBucketId = FilterBucket.fid,
+        filterDataHolderId = FilterDataHolder.fid,
+        redirectTypeValue = typeNameToTypeValue.redirect,
+        unserialize = µb.CompiledLineIO.unserialize;
+
+    for ( let line of this.goodFilters ) {
+        if ( this.badFilters.has(line) ) {
+            this.discardedCount += 1;
+            continue;
+        }
+
+        let args = unserialize(line);
+        let bits = args[0];
+
+        // Special cases: delegate to more specialized engines.
+        // Redirect engine.
+        if ( (bits & 0x1F0) === redirectTypeValue ) {
+            µb.redirectEngine.fromCompiledRule(args[1]);
+            continue;
+        }
+
+        // Plain static filters.
+        let tokenHash = args[1];
+        let fdata = args[2];
+
+        // Special treatment: data-holding filters are stored separately
+        // because they require special matching algorithm (unlike other
+        // filters, ALL hits must be reported).
+        if ( fdata[0] === filterDataHolderId ) {
+            let entry = new FilterDataHolderEntry(bits, tokenHash, fdata);
+            let bucket = this.dataFilters.get(tokenHash);
+            if ( bucket !== undefined ) {
+                entry.next = bucket;
+            }
+            this.dataFilters.set(tokenHash, entry);
+            continue;
+        }
+
+        let bucket = this.categories.get(bits);
+        if ( bucket === undefined ) {
+            bucket = new Map();
+            this.categories.set(bits, bucket);
+        }
+        let entry = bucket.get(tokenHash);
+
+        if ( tokenHash === this.dotTokenHash ) {
+            if ( entry === undefined ) {
+                entry = new FilterHostnameDict();
+                bucket.set(this.dotTokenHash, entry);
+            }
+            entry.add(fdata);
+            continue;
+        }
+
+        if ( entry === undefined ) {
+            bucket.set(tokenHash, filterFromCompiledData(fdata));
+            continue;
+        }
+        if ( entry.fid === filterBucketId ) {
+            entry.add(fdata);
+            continue;
+        }
+        if ( entry.fid === filterPairId ) {
+            bucket.set(
+                tokenHash,
+                entry.upgrade(filterFromCompiledData(fdata))
+            );
+            continue;
+        }
+        bucket.set(
+            tokenHash,
+            new FilterPair(entry, filterFromCompiledData(fdata))
+        );
+    }
+
     this.filterParser.reset();
-    this.fclassLast = null;
-    this.fdataLast = null;
-    this.filterLast = null;
+    this.goodFilters = new Set();
     this.frozen = true;
-    //console.log(JSON.stringify(Array.from(filterClassHistogram)));
-    //this.tokenHistogram = new Map(Array.from(this.tokenHistogram).sort(function(a, b) {
-    //    return a[0].localeCompare(b[0]) || (b[1] - a[1]);
-    //}));
+};
+
+/******************************************************************************/
+
+// This is necessary for when the filtering engine readiness will depend
+// on asynchronous operations (ex.: when loading a wasm module).
+
+FilterContainer.prototype.readyToUse = function() {
+    return hnTrieManager.readyToUse();
 };
 
 /******************************************************************************/
@@ -2125,9 +2166,6 @@ FilterContainer.prototype.compile = function(raw, writer) {
         return false;
     }
 
-    // 0 = network filters
-    writer.select(0);
-
     // Pure hostnames, use more efficient dictionary lookup
     // https://github.com/chrisaljoudi/uBlock/issues/665
     // Create a dict keyed on request type etc.
@@ -2207,10 +2245,16 @@ FilterContainer.prototype.compileToAtomicFilter = function(
     fdata,
     writer
 ) {
-    let descBits = parsed.action |
-                   parsed.important |
-                   parsed.party |
-                   parsed.badFilter;
+
+    // 0 = network filters
+    // 1 = network filters: bad filters
+    if ( parsed.badFilter ) {
+        writer.select(1);
+    } else {
+        writer.select(0);
+    }
+
+    let descBits = parsed.action | parsed.important | parsed.party;
     let type = parsed.types;
 
     // Typeless
@@ -2231,7 +2275,7 @@ FilterContainer.prototype.compileToAtomicFilter = function(
 
     // Only static filter with an explicit type can be redirected. If we reach
     // this point, it's because there is one or more explicit type.
-    if ( parsed.badFilter === 0 && parsed.redirect ) {
+    if ( parsed.redirect ) {
         let redirects = µb.redirectEngine.compileRuleFromStaticFilter(parsed.raw);
         if ( Array.isArray(redirects) ) {
             for ( let redirect of redirects ) {
@@ -2244,137 +2288,26 @@ FilterContainer.prototype.compileToAtomicFilter = function(
 /******************************************************************************/
 
 FilterContainer.prototype.fromCompiledContent = function(reader) {
-    var badFilterBit = BadFilter,
-        filterPairId = FilterPair.fid,
-        filterBucketId = FilterBucket.fid,
-        filterDataHolderId = FilterDataHolder.fid,
-        redirectTypeValue = typeNameToTypeValue.redirect,
-        args, bits, bucket, entry,
-        tokenHash, fdata, fingerprint;
-
     // 0 = network filters
     reader.select(0);
-
-    while ( reader.next() === true ) {
-        args = reader.args();
-        bits = args[0];
-
-        if ( (bits & badFilterBit) !== 0 ) {
-            this.badFilters.add(args);
-            continue;
-        }
-
-        // Special cases: delegate to more specialized engines.
-        // Redirect engine.
-        if ( (bits & 0x1F0) === redirectTypeValue ) {
-            µb.redirectEngine.fromCompiledRule(args[1]);
-            continue;
-        }
-
+    while ( reader.next() ) {
         this.acceptedCount += 1;
-
-        // Plain static filters.
-        fingerprint = reader.fingerprint();
-        tokenHash = args[1];
-        fdata = args[2];
-
-        // Special treatment: data-holding filters are stored separately
-        // because they require special matching algorithm (unlike other
-        // filters, ALL hits must be reported).
-        if ( fdata[0] === filterDataHolderId ) {
-            if ( this.duplicateBuster.has(fingerprint) ) {
-                this.discardedCount += 1;
-                continue;
-            }
-            this.duplicateBuster.add(fingerprint);
-            entry = new FilterDataHolderEntry(bits, tokenHash, fdata);
-            bucket = this.dataFilters.get(tokenHash);
-            if ( bucket !== undefined ) {
-                entry.next = bucket;
-            }
-            this.dataFilters.set(tokenHash, entry);
-            continue;
-        }
-
-        bucket = this.categories.get(bits);
-        if ( bucket === undefined ) {
-            bucket = new Map();
-            this.categories.set(bits, bucket);
-        }
-        entry = bucket.get(tokenHash);
-
-        if ( tokenHash === this.dotTokenHash ) {
-            if ( entry === undefined ) {
-                entry = new FilterHostnameDict();
-                bucket.set(this.dotTokenHash, entry);
-            }
-            if ( entry.add(fdata) === false ) {
-                this.discardedCount += 1;
-            }
-            continue;
-        }
-
-        if ( this.duplicateBuster.has(fingerprint) ) {
+        if ( this.goodFilters.has(reader.line) ) {
             this.discardedCount += 1;
-            continue;
+        } else {
+            this.goodFilters.add(reader.line);
         }
-        this.duplicateBuster.add(fingerprint);
-
-        if ( entry === undefined ) {
-            bucket.set(tokenHash, filterFromCompiledData(fdata));
-            continue;
-        }
-        if ( entry.fid === filterBucketId ) {
-            entry.add(fdata);
-            continue;
-        }
-        if ( entry.fid === filterPairId ) {
-            bucket.set(
-                tokenHash,
-                entry.upgrade(filterFromCompiledData(fdata))
-            );
-            continue;
-        }
-        bucket.set(
-            tokenHash,
-            new FilterPair(entry, filterFromCompiledData(fdata))
-        );
     }
-};
 
-/******************************************************************************/
-
-FilterContainer.prototype.removeBadFilters = function() {
-    var filterPairId = FilterPair.fid,
-        filterBucketId = FilterBucket.fid,
-        filterHostnameDictId = FilterHostnameDict.fid,
-        bits, tokenHash, fdata, bucket, entry;
-    for ( var args of this.badFilters ) {
-        bits = args[0] & ~BadFilter;
-        bucket = this.categories.get(bits);
-        if ( bucket === undefined ) { continue; }
-        tokenHash = args[1];
-        entry = bucket.get(tokenHash);
-        if ( entry === undefined ) { continue; }
-        fdata = args[2];
-        if ( entry.fid === filterPairId || entry.fid === filterBucketId ) {
-            entry.remove(fdata);
-            entry = entry.downgrade();
-            if ( entry !== undefined ) {
-                bucket.set(tokenHash, entry);
-            } else {
-                bucket.delete(tokenHash);
-            }
-        } else if ( entry.fid === filterHostnameDictId ) {
-            entry.remove(fdata);
-            if ( entry.size === 0 ) {
-                bucket.delete(tokenHash);
-            }
-        } else if ( arrayStrictEquals(entry.compile(), fdata) ) {
-            bucket.delete(tokenHash);
-        }
-        if ( bucket.size === 0 ) {
-            this.categories.delete(bits);
+    // 1 = network filters: bad filter directives
+    // Since we are going to keep bad filter fingerprints around, we ensure
+    // they are "detached" from the parent string from which they are sliced.
+    // We keep bad filter fingerprints around to use them when user
+    // incrementally add filters (through "Block element" for example).
+    reader.select(1);
+    while ( reader.next() ) {
+        if ( this.badFilters.has(reader.line) === false ) {
+            this.badFilters.add(µb.orphanizeString(reader.line));
         }
     }
 };
@@ -2384,26 +2317,24 @@ FilterContainer.prototype.removeBadFilters = function() {
 FilterContainer.prototype.matchAndFetchData = function(dataType, requestURL, out, outlog) {
     if ( this.dataFilters.length === 0 ) { return; }
 
-    var url = this.urlTokenizer.setURL(requestURL);
+    let url = this.urlTokenizer.setURL(requestURL);
 
-    requestHostnameRegister = µb.URI.hostnameFromURI(url);
+    pageHostnameRegister = requestHostnameRegister = µb.URI.hostnameFromURI(url);
 
     // We need to visit ALL the matching filters.
-    var toAddImportant = new Map(),
+    let toAddImportant = new Map(),
         toAdd = new Map(),
         toRemove = new Map();
 
-    var entry, f,
-        tokenHashes = this.urlTokenizer.getTokens(),
-        tokenHash, tokenOffset,
+    let tokenHashes = this.urlTokenizer.getTokens(),
         i = 0;
     while ( i < 32 ) {
-        tokenHash = tokenHashes[i++];
+        let tokenHash = tokenHashes[i++];
         if ( tokenHash === 0 ) { break; }
-        tokenOffset = tokenHashes[i++];
-        entry = this.dataFilters.get(tokenHash);
+        let tokenOffset = tokenHashes[i++];
+        let entry = this.dataFilters.get(tokenHash);
         while ( entry !== undefined ) {
-            f = entry.filter;
+            let f = entry.filter;
             if ( f.match(url, tokenOffset) === true ) {
                 if ( entry.categoryBits & 0x001 ) {
                     toRemove.set(f.dataStr, entry);
@@ -2416,9 +2347,9 @@ FilterContainer.prototype.matchAndFetchData = function(dataType, requestURL, out
             entry = entry.next;
         }
     }
-    entry = this.dataFilters.get(this.noTokenHash);
+    let entry = this.dataFilters.get(this.noTokenHash);
     while ( entry !== undefined ) {
-        f = entry.filter;
+        let f = entry.filter;
         if ( f.match(url) === true ) {
             if ( entry.categoryBits & 0x001 ) {
                 toRemove.set(f.dataStr, entry);
@@ -2434,12 +2365,11 @@ FilterContainer.prototype.matchAndFetchData = function(dataType, requestURL, out
     if ( toAddImportant.size === 0 && toAdd.size === 0 ) { return; }
 
     // Remove entries overriden by other filters.
-    var key;
-    for ( key of toAddImportant.keys() ) {
+    for ( let key of toAddImportant.keys() ) {
         toAdd.delete(key);
         toRemove.delete(key);
     }
-    for ( key of toRemove.keys() ) {
+    for ( let key of toRemove.keys() ) {
         if ( key === '' ) {
             toAdd.clear();
             break;
@@ -2447,26 +2377,25 @@ FilterContainer.prototype.matchAndFetchData = function(dataType, requestURL, out
         toAdd.delete(key);
     }
 
-    var logData;
-    for ( entry of toAddImportant ) {
+    for ( let entry of toAddImportant ) {
         out.push(entry[0]);
         if ( outlog === undefined ) { continue; }
-        logData = entry[1].logData();
+        let logData = entry[1].logData();
         logData.source = 'static';
         logData.result = 1;
         outlog.push(logData);
     }
-    for ( entry of toAdd ) {
+    for ( let entry of toAdd ) {
         out.push(entry[0]);
         if ( outlog === undefined ) { continue; }
-        logData = entry[1].logData();
+        let logData = entry[1].logData();
         logData.source = 'static';
         logData.result = 1;
         outlog.push(logData);
     }
     if ( outlog !== undefined ) {
-        for ( entry of toRemove.values()) {
-            logData = entry.logData();
+        for ( let entry of toRemove.values()) {
+            let logData = entry.logData();
             logData.source = 'static';
             logData.result = 2;
             outlog.push(logData);
@@ -2481,20 +2410,19 @@ FilterContainer.prototype.matchAndFetchData = function(dataType, requestURL, out
 
 FilterContainer.prototype.matchTokens = function(bucket, url) {
     // Hostname-only filters
-    var f = bucket.get(this.dotTokenHash);
+    let f = bucket.get(this.dotTokenHash);
     if ( f !== undefined && f.match() === true ) {
         this.thRegister = this.dotTokenHash;
         this.fRegister = f;
         return true;
     }
 
-    var tokenHashes = this.urlTokenizer.getTokens(),
-        tokenHash, tokenOffset,
+    let tokenHashes = this.urlTokenizer.getTokens(),
         i = 0;
     for (;;) {
-        tokenHash = tokenHashes[i++];
+        let tokenHash = tokenHashes[i++];
         if ( tokenHash === 0 ) { break; }
-        tokenOffset = tokenHashes[i++];
+        let tokenOffset = tokenHashes[i++];
         f = bucket.get(tokenHash);
         if ( f !== undefined && f.match(url, tokenOffset) === true ) {
             this.thRegister = tokenHash;
@@ -2529,8 +2457,10 @@ FilterContainer.prototype.matchStringGenericHide = function(requestURL) {
     let url = this.urlTokenizer.setURL(requestURL);
 
     // https://github.com/gorhill/uBlock/issues/2225
-    //   Important: this is used by FilterHostnameDict.match().
-    requestHostnameRegister = µb.URI.hostnameFromURI(url);
+    //   Important:
+    //   - `pageHostnameRegister` is used by FilterOrigin.matchOrigin().
+    //   - `requestHostnameRegister` is used by FilterHostnameDict.match().
+    pageHostnameRegister = requestHostnameRegister = µb.URI.hostnameFromURI(url);
 
     let bucket = this.categories.get(genericHideException);
     if ( !bucket || this.matchTokens(bucket, url) === false ) {
@@ -2559,20 +2489,20 @@ FilterContainer.prototype.matchStringExactType = function(context, requestURL, r
     if ( requestType === 'generichide' ) {
         return this.matchStringGenericHide(requestURL);
     }
-    var type = typeNameToTypeValue[requestType];
-    if ( type === undefined ) {
-        return 0;
-    }
+    let type = typeNameToTypeValue[requestType];
+    if ( type === undefined ) { return 0; }
 
     // Prime tokenizer: we get a normalized URL in return.
-    var url = this.urlTokenizer.setURL(requestURL);
+    let url = this.urlTokenizer.setURL(requestURL);
 
     // These registers will be used by various filters
     pageHostnameRegister = context.pageHostname || '';
     requestHostnameRegister = µb.URI.hostnameFromURI(url);
 
-    var party = isFirstParty(context.pageDomain, requestHostnameRegister) ? FirstParty : ThirdParty,
-        categories = this.categories,
+    let party = isFirstParty(context.pageDomain, requestHostnameRegister)
+        ? FirstParty
+        : ThirdParty;
+    let categories = this.categories,
         catBits, bucket;
 
     this.fRegister = null;
@@ -2640,7 +2570,7 @@ FilterContainer.prototype.matchString = function(context) {
     // https://github.com/chrisaljoudi/uBlock/issues/519
     // Use exact type match for anything beyond `other`
     // Also, be prepared to support unknown types
-    var type = typeNameToTypeValue[context.requestType];
+    let type = typeNameToTypeValue[context.requestType];
     if ( type === undefined ) {
          type = otherTypeBitValue;
     } else if ( type === 0 || type > otherTypeBitValue ) {
@@ -2669,7 +2599,7 @@ FilterContainer.prototype.matchString = function(context) {
     // filter.
 
     // Prime tokenizer: we get a normalized URL in return.
-    var url = this.urlTokenizer.setURL(context.requestURL);
+    let url = this.urlTokenizer.setURL(context.requestURL);
 
     // These registers will be used by various filters
     pageHostnameRegister = context.pageHostname || '';
@@ -2677,10 +2607,10 @@ FilterContainer.prototype.matchString = function(context) {
 
     this.fRegister = null;
 
-    var party = isFirstParty(context.pageDomain, context.requestHostname)
+    let party = isFirstParty(context.pageDomain, context.requestHostname)
         ? FirstParty
         : ThirdParty;
-    var categories = this.categories,
+    let categories = this.categories,
         catBits, bucket;
 
     // https://github.com/chrisaljoudi/uBlock/issues/139
@@ -2802,6 +2732,18 @@ FilterContainer.prototype.toLogData = function() {
 
 FilterContainer.prototype.getFilterCount = function() {
     return this.acceptedCount - this.discardedCount;
+};
+
+/******************************************************************************/
+
+FilterContainer.prototype.benchmark = function(contexts) {
+    const t0 = performance.now();
+    const results = [];
+    for ( const context of contexts ) {
+         results.push(this.matchString(context));
+    }
+    const t1 = performance.now();
+    return { t0, t1, duration: t1 - t0, results };
 };
 
 /******************************************************************************/

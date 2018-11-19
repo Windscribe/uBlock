@@ -1,7 +1,7 @@
 /*******************************************************************************
 
-    µBlock - a browser extension to block requests.
-    Copyright (C) 2015 The µBlock authors
+    uBlock Origin - a browser extension to block requests.
+    Copyright (C) 2018-present Raymond Hill
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,29 +19,15 @@
     Home: https://github.com/gorhill/uBlock
 */
 
-/******************************************************************************/
-
-(function() {
-
-/******************************************************************************/
-
 'use strict';
 
-vAPI.messaging.send(
-    'default',
-    {
-        what: 'gotoURL',
-        details: {
-            url: 'dashboard.html',
-            select: true,
-            index: -1
-        }
+// If content scripts are already injected, we need to respond with `false`,
+// to "should inject content scripts?"
+
+(function() {
+    try {
+        return vAPI.uBO !== true;
+    } catch(ex) {
     }
-);
-window.close();
-
-/******************************************************************************/
-
+    return true;
 })();
-
-/******************************************************************************/

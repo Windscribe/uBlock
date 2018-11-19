@@ -1,7 +1,7 @@
 /*******************************************************************************
 
     uBlock Origin - a browser extension to block requests.
-    Copyright (C) 2014-2018 Raymond Hill
+    Copyright (C) 2014-present Raymond Hill
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -33,25 +33,31 @@ if ( vAPI.webextFlavor === undefined ) {
 
 /******************************************************************************/
 
-var µBlock = (function() { // jshint ignore:line
+const µBlock = (function() { // jshint ignore:line
 
-    var oneSecond = 1000,
-        oneMinute = 60 * oneSecond;
+    const oneSecond = 1000,
+          oneMinute = 60 * oneSecond;
 
-    var hiddenSettingsDefault = {
+    const hiddenSettingsDefault = {
         assetFetchTimeout: 30,
         autoUpdateAssetFetchPeriod: 120,
         autoUpdatePeriod: 7,
+        benchmarkingPane: false,
+        cacheStorageCompression: true,
+        cacheControlForFirefox1376932: 'no-cache, no-store, must-revalidate',
         debugScriptlets: false,
+        disableWebAssembly: false,
         ignoreRedirectFilters: false,
         ignoreScriptInjectFilters: false,
         manualUpdateAssetFetchPeriod: 500,
         popupFontSize: 'unset',
+        requestJournalProcessPeriod: 1000,
+        strictBlockingBypassDuration: 120,
         suspendTabsUntilReady: false,
         userResourcesLocation: 'unset'
     };
 
-    var whitelistDefault = [
+    const whitelistDefault = [
         'about-scheme',
         'chrome-extension-scheme',
         'chrome-scheme',
@@ -60,16 +66,9 @@ var µBlock = (function() { // jshint ignore:line
         'vivaldi-scheme',
         'wyciwyg-scheme',   // Firefox's "What-You-Cache-Is-What-You-Get"
     ];
-    // https://github.com/gorhill/uBlock/issues/3693#issuecomment-379782428
-    if ( vAPI.webextFlavor.soup.has('webext') === false ) {
-        whitelistDefault.push('behind-the-scene');
-    }
 
     return {
         firstInstall: false,
-
-        onBeforeStartQueue: [],
-        onStartCompletedQueue: [],
 
         userSettings: {
             advancedUserEnabled: false,
@@ -95,13 +94,13 @@ var µBlock = (function() { // jshint ignore:line
 
         hiddenSettingsDefault: hiddenSettingsDefault,
         hiddenSettings: (function() {
-            var out = Object.assign({}, hiddenSettingsDefault),
+            let out = Object.assign({}, hiddenSettingsDefault),
                 json = vAPI.localStorage.getItem('immediateHiddenSettings');
             if ( typeof json === 'string' ) {
                 try {
-                    var o = JSON.parse(json);
+                    let o = JSON.parse(json);
                     if ( o instanceof Object ) {
-                        for ( var k in o ) {
+                        for ( let k in o ) {
                             if ( out.hasOwnProperty(k) ) {
                                 out[k] = o[k];
                             }
@@ -119,7 +118,7 @@ var µBlock = (function() { // jshint ignore:line
         // Features detection.
         privacySettingsSupported: vAPI.browserSettings instanceof Object,
         cloudStorageSupported: vAPI.cloud instanceof Object,
-        canFilterResponseBody: vAPI.net.canFilterResponseBody === true,
+        canFilterResponseData: typeof browser.webRequest.filterResponseData === 'function',
         canInjectScriptletsNow: vAPI.webextFlavor.soup.has('chromium'),
 
         // https://github.com/chrisaljoudi/uBlock/issues/180
@@ -137,8 +136,8 @@ var µBlock = (function() { // jshint ignore:line
 
         // Read-only
         systemSettings: {
-            compiledMagic: 3,   // Increase when compiled format changes
-            selfieMagic: 3      // Increase when selfie format changes
+            compiledMagic: 6,   // Increase when compiled format changes
+            selfieMagic: 6      // Increase when selfie format changes
         },
 
         restoreBackupSettings: {

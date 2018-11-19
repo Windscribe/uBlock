@@ -2,6 +2,7 @@
 
     uBlock Origin - a browser extension to block requests.
     Copyright (C) 2014-2018 The uBlock Origin authors
+    Copyright (C) 2014-present Raymond Hill
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -464,7 +465,7 @@ vAPI.tabs.open = function(details) {
             // Opening a tab from incognito window won't focus the window
             // in which the tab was opened
             var focusWindow = function(tab) {
-                if ( tab.active ) {
+                if ( tab.active && chrome.windows instanceof Object ) {
                     chrome.windows.update(tab.windowId, { focused: true });
                 }
             };
@@ -490,7 +491,9 @@ vAPI.tabs.open = function(details) {
         };
 
         // Open in a standalone window
-        if ( details.popup === true ) {
+        // https://github.com/uBlockOrigin/uBlock-issues/issues/168#issuecomment-413038191
+        //   Not all platforms support browser.windows API.
+        if ( details.popup === true && chrome.windows instanceof Object ) {
             chrome.windows.create({ url: details.url, type: 'popup' });
             return;
         }
@@ -548,6 +551,7 @@ vAPI.tabs.open = function(details) {
             _details.url = targetURL;
         }
         chrome.tabs.update(tab.id, _details, function(tab) {
+            if ( chrome.windows instanceof Object === false ) { return; }
             chrome.windows.update(tab.windowId, { focused: true });
         });
     });
@@ -604,6 +608,7 @@ vAPI.tabs.select = function(tabId) {
     chrome.tabs.update(tabId, { active: true }, function(tab) {
         void chrome.runtime.lastError;
         if ( !tab ) { return; }
+        if ( chrome.windows instanceof Object === false ) { return; }
         chrome.windows.update(tab.windowId, { focused: true });
     });
 };
@@ -615,7 +620,7 @@ vAPI.tabs.injectScript = function(tabId, details, callback) {
         // https://code.google.com/p/chromium/issues/detail?id=410868#c8
         void chrome.runtime.lastError;
         if ( typeof callback === 'function' ) {
-            callback();
+            callback.apply(null, arguments);
         }
     };
     if ( tabId ) {
@@ -643,11 +648,11 @@ vAPI.tabs.injectScript = function(tabId, details, callback) {
 //   Ensure ImageData for toolbar icon is valid before use.
 
 vAPI.setIcon = (function() {
-    let browserAction = chrome.browserAction,
+    const browserAction = chrome.browserAction,
         titleTemplate =
             chrome.runtime.getManifest().browser_action.default_title +
             ' ({badge})';
-    let icons = [
+    const icons = [
         {
             path: { '16': 'img/icon_16-off.png', '32': 'img/icon_32-off.png' }
         },
@@ -677,27 +682,38 @@ vAPI.setIcon = (function() {
         // https://searchfox.org/mozilla-central/rev/5ff2d7683078c96e4b11b8a13674daded935aa44/browser/components/extensions/parent/ext-browserAction.js#631
         if ( vAPI.webextFlavor.soup.has('chromium') === false ) { return; }
 
-        let imgs = [];
+        const imgs = [];
         for ( let i = 0; i < icons.length; i++ ) {
             let path = icons[i].path;
-            for ( let key in path ) {
+            for ( const key in path ) {
                 if ( path.hasOwnProperty(key) === false ) { continue; }
                 imgs.push({ i: i, p: key });
             }
         }
-        let onLoaded = function() {
-            for ( let img of imgs ) {
+
+        // https://github.com/uBlockOrigin/uBlock-issues/issues/296
+        const safeGetImageData = function(ctx, w, h) {
+            let data;
+            try {
+                data = ctx.getImageData(0, 0, w, h);
+            } catch(ex) {
+            }
+            return data;
+        };
+
+        const onLoaded = function() {
+            for ( const img of imgs ) {
                 if ( img.r.complete === false ) { return; }
             }
             let ctx = document.createElement('canvas').getContext('2d');
             let iconData = [ null, null ];
-            for ( let img of imgs ) {
+            for ( const img of imgs ) {
                 let w = img.r.naturalWidth, h = img.r.naturalHeight;
                 ctx.width = w; ctx.height = h;
                 ctx.clearRect(0, 0, w, h);
                 ctx.drawImage(img.r, 0, 0);
                 if ( iconData[img.i] === null ) { iconData[img.i] = {}; }
-                let imgData = ctx.getImageData(0, 0, w, h);
+                const imgData = safeGetImageData(ctx, w, h);
                 if (
                     imgData instanceof Object === false ||
                     imgData.data instanceof Uint8ClampedArray === false ||
@@ -716,7 +732,7 @@ vAPI.setIcon = (function() {
                 }
             }
         };
-        for ( let img of imgs ) {
+        for ( const img of imgs ) {
             img.r = new Image();
             img.r.addEventListener('load', onLoaded, { once: true });
             img.r.src = icons[img.i].path[img.p];
@@ -1033,6 +1049,61 @@ vAPI.messaging.broadcast = function(message) {
     );
 })();
 
+vAPI.net = {
+    listenerMap: new WeakMap(),
+    // legacy Chromium understands only these network request types.
+    validTypes: (function() {
+        let types = new Set([
+            'main_frame',
+            'sub_frame',
+            'stylesheet',
+            'script',
+            'image',
+            'object',
+            'xmlhttprequest',
+            'other'
+        ]);
+        let wrrt = browser.webRequest.ResourceType;
+        if ( wrrt instanceof Object ) {
+            for ( let typeKey in wrrt ) {
+                if ( wrrt.hasOwnProperty(typeKey) ) {
+                    types.add(wrrt[typeKey]);
+                }
+            }
+        }
+        return types;
+    })(),
+    denormalizeFilters: null,
+    normalizeDetails: null,
+    addListener: function(which, clientListener, filters, options) {
+        if ( typeof this.denormalizeFilters === 'function' ) {
+            filters = this.denormalizeFilters(filters);
+        }
+        let actualListener;
+        if ( typeof this.normalizeDetails === 'function' ) {
+            actualListener = function(details) {
+                vAPI.net.normalizeDetails(details);
+                return clientListener(details);
+            };
+            this.listenerMap.set(clientListener, actualListener);
+        }
+        browser.webRequest[which].addListener(
+            actualListener || clientListener,
+            filters,
+            options
+        );
+    },
+    removeListener: function(which, clientListener) {
+        let actualListener = this.listenerMap.get(clientListener);
+        if ( actualListener !== undefined ) {
+            this.listenerMap.delete(clientListener);
+        }
+        browser.webRequest[which].removeListener(
+            actualListener || clientListener
+        );
+    },
+};
+
 /******************************************************************************/
 /******************************************************************************/
 
@@ -1092,62 +1163,6 @@ vAPI.commands = chrome.commands;
 /******************************************************************************/
 /******************************************************************************/
 
-// This is called only once, when everything has been loaded in memory after
-// the extension was launched. It can be used to inject content scripts
-// in already opened web pages, to remove whatever nuisance could make it to
-// the web pages before uBlock was ready.
-
-vAPI.onLoadAllCompleted = function() {
-    // http://code.google.com/p/chromium/issues/detail?id=410868#c11
-    // Need to be sure to access `vAPI.lastError()` to prevent
-    // spurious warnings in the console.
-    var onScriptInjected = function() {
-        vAPI.lastError();
-    };
-    var scriptStart = function(tabId) {
-        var manifest = chrome.runtime.getManifest();
-        if ( manifest instanceof Object === false ) { return; }
-        for ( var contentScript of manifest.content_scripts ) {
-            for ( var file of contentScript.js ) {
-                vAPI.tabs.injectScript(tabId, {
-                    file: file,
-                    allFrames: contentScript.all_frames,
-                    runAt: contentScript.run_at
-                }, onScriptInjected);
-            }
-        }
-    };
-    var bindToTabs = function(tabs) {
-        var µb = µBlock;
-        var i = tabs.length, tab;
-        while ( i-- ) {
-            tab = tabs[i];
-            µb.tabContextManager.commit(tab.id, tab.url);
-            µb.bindTabToPageStats(tab.id);
-            // https://github.com/chrisaljoudi/uBlock/issues/129
-            if ( /^https?:\/\//.test(tab.url) ) {
-                scriptStart(tab.id);
-            }
-        }
-    };
-
-    chrome.tabs.query({ url: '<all_urls>' }, bindToTabs);
-};
-
-/******************************************************************************/
-/******************************************************************************/
-
-vAPI.punycodeHostname = function(hostname) {
-    return hostname;
-};
-
-vAPI.punycodeURL = function(url) {
-    return url;
-};
-
-/******************************************************************************/
-/******************************************************************************/
-
 // https://github.com/gorhill/uBlock/issues/531
 // Storage area dedicated to admin settings. Read-only.
 
@@ -1190,10 +1205,10 @@ vAPI.cloud = (function() {
         return;
     }
 
-    var chunkCountPerFetch = 16; // Must be a power of 2
+    let chunkCountPerFetch = 16; // Must be a power of 2
 
     // Mind chrome.storage.sync.MAX_ITEMS (512 at time of writing)
-    var maxChunkCountPerItem = Math.floor(512 * 0.75) & ~(chunkCountPerFetch - 1);
+    let maxChunkCountPerItem = Math.floor(512 * 0.75) & ~(chunkCountPerFetch - 1);
 
     // Mind chrome.storage.sync.QUOTA_BYTES_PER_ITEM (8192 at time of writing)
     // https://github.com/gorhill/uBlock/issues/3006
@@ -1201,14 +1216,14 @@ vAPI.cloud = (function() {
     //  the infrastructure. Unfortunately this leads to less usable space for
     //  actual data, but all of this is provided for free by browser vendors,
     //  so we need to accept and deal with these limitations.
-    var evalMaxChunkSize = function() {
+    let evalMaxChunkSize = function() {
         return Math.floor(
             (chrome.storage.sync.QUOTA_BYTES_PER_ITEM || 8192) *
             (vAPI.webextFlavor.soup.has('firefox') ? 0.6 : 0.75)
         );
     };
 
-    var maxChunkSize = evalMaxChunkSize();
+    let maxChunkSize = evalMaxChunkSize();
 
     // The real actual webextFlavor value may not be set in stone, so listen
     // for possible future changes.
@@ -1220,9 +1235,9 @@ vAPI.cloud = (function() {
     // Firefox:
     // https://developer.mozilla.org/en-US/Add-ons/WebExtensions/API/storage/sync
     // > You can store up to 100KB of data using this API/
-    var maxStorageSize = chrome.storage.sync.QUOTA_BYTES || 102400;
+    let maxStorageSize = chrome.storage.sync.QUOTA_BYTES || 102400;
 
-    var options = {
+    let options = {
         defaultDeviceName: window.navigator.platform,
         deviceName: vAPI.localStorage.getItem('deviceName') || ''
     };
@@ -1234,23 +1249,20 @@ vAPI.cloud = (function() {
     // good thing given chrome.storage.sync.MAX_WRITE_OPERATIONS_PER_MINUTE
     // and chrome.storage.sync.MAX_WRITE_OPERATIONS_PER_HOUR.
 
-    var getCoarseChunkCount = function(dataKey, callback) {
-        var bin = {};
-        for ( var i = 0; i < maxChunkCountPerItem; i += 16 ) {
+    let getCoarseChunkCount = function(dataKey, callback) {
+        let bin = {};
+        for ( let i = 0; i < maxChunkCountPerItem; i += 16 ) {
             bin[dataKey + i.toString()] = '';
         }
 
         chrome.storage.sync.get(bin, function(bin) {
             if ( chrome.runtime.lastError ) {
-                callback(0, chrome.runtime.lastError.message);
-                return;
+                return callback(0, chrome.runtime.lastError.message);
             }
 
-            var chunkCount = 0;
-            for ( var i = 0; i < maxChunkCountPerItem; i += 16 ) {
-                if ( bin[dataKey + i.toString()] === '' ) {
-                    break;
-                }
+            let chunkCount = 0;
+            for ( let i = 0; i < maxChunkCountPerItem; i += 16 ) {
+                if ( bin[dataKey + i.toString()] === '' ) { break; }
                 chunkCount = i + 16;
             }
 
@@ -1258,17 +1270,17 @@ vAPI.cloud = (function() {
         });
     };
 
-    var deleteChunks = function(dataKey, start) {
-        var keys = [];
+    let deleteChunks = function(dataKey, start) {
+        let keys = [];
 
         // No point in deleting more than:
         // - The max number of chunks per item
         // - The max number of chunks per storage limit
-        var n = Math.min(
+        let n = Math.min(
             maxChunkCountPerItem,
             Math.ceil(maxStorageSize / maxChunkSize)
         );
-        for ( var i = start; i < n; i++ ) {
+        for ( let i = start; i < n; i++ ) {
             keys.push(dataKey + i.toString());
         }
         if ( keys.length !== 0 ) {
@@ -1276,19 +1288,19 @@ vAPI.cloud = (function() {
         }
     };
 
-    var start = function(/* dataKeys */) {
+    let start = function(/* dataKeys */) {
     };
 
-    var push = function(dataKey, data, callback) {
+    let push = function(dataKey, data, callback) {
 
-        var bin = {
+        let bin = {
             'source': options.deviceName || options.defaultDeviceName,
             'tstamp': Date.now(),
             'data': data,
             'size': 0
         };
         bin.size = JSON.stringify(bin).length;
-        var item = JSON.stringify(bin);
+        let item = JSON.stringify(bin);
 
         // Chunkify taking into account QUOTA_BYTES_PER_ITEM:
         //   https://developer.chrome.com/extensions/storage#property-sync
@@ -1296,14 +1308,14 @@ vAPI.cloud = (function() {
         //   "storage, as measured by the JSON stringification of its value
         //   "plus its key length."
         bin = {};
-        var chunkCount = Math.ceil(item.length / maxChunkSize);
-        for ( var i = 0; i < chunkCount; i++ ) {
+        let chunkCount = Math.ceil(item.length / maxChunkSize);
+        for ( let i = 0; i < chunkCount; i++ ) {
             bin[dataKey + i.toString()] = item.substr(i * maxChunkSize, maxChunkSize);
         }
-        bin[dataKey + i.toString()] = ''; // Sentinel
+        bin[dataKey + chunkCount.toString()] = ''; // Sentinel
 
         chrome.storage.sync.set(bin, function() {
-            var errorStr;
+            let errorStr;
             if ( chrome.runtime.lastError ) {
                 errorStr = chrome.runtime.lastError.message;
                 // https://github.com/gorhill/uBlock/issues/3006#issuecomment-332597677
@@ -1323,27 +1335,30 @@ vAPI.cloud = (function() {
         });
     };
 
-    var pull = function(dataKey, callback) {
+    let pull = function(dataKey, callback) {
 
-        var assembleChunks = function(bin) {
+        let assembleChunks = function(bin) {
             if ( chrome.runtime.lastError ) {
                 callback(null, chrome.runtime.lastError.message);
                 return;
             }
 
             // Assemble chunks into a single string.
-            var json = [], jsonSlice;
-            var i = 0;
+            // https://www.reddit.com/r/uMatrix/comments/8lc9ia/my_rules_tab_hangs_with_cloud_storage_support/
+            //   Explicit sentinel is not necessarily present: this can
+            //   happen when the number of chunks is a multiple of
+            //   chunkCountPerFetch. Hence why we must also test against
+            //   undefined.
+            let json = [], jsonSlice;
+            let i = 0;
             for (;;) {
                 jsonSlice = bin[dataKey + i.toString()];
-                if ( jsonSlice === '' ) {
-                    break;
-                }
+                if ( jsonSlice === '' || jsonSlice === undefined ) { break; }
                 json.push(jsonSlice);
                 i += 1;
             }
 
-            var entry = null;
+            let entry = null;
             try {
                 entry = JSON.parse(json.join(''));
             } catch(ex) {
@@ -1351,14 +1366,14 @@ vAPI.cloud = (function() {
             callback(entry);
         };
 
-        var fetchChunks = function(coarseCount, errorStr) {
+        let fetchChunks = function(coarseCount, errorStr) {
             if ( coarseCount === 0 || typeof errorStr === 'string' ) {
                 callback(null, errorStr);
                 return;
             }
 
-            var bin = {};
-            for ( var i = 0; i < coarseCount; i++ ) {
+            let bin = {};
+            for ( let i = 0; i < coarseCount; i++ ) {
                 bin[dataKey + i.toString()] = '';
             }
 
@@ -1368,14 +1383,12 @@ vAPI.cloud = (function() {
         getCoarseChunkCount(dataKey, fetchChunks);
     };
 
-    var getOptions = function(callback) {
-        if ( typeof callback !== 'function' ) {
-            return;
-        }
+    let getOptions = function(callback) {
+        if ( typeof callback !== 'function' ) { return; }
         callback(options);
     };
 
-    var setOptions = function(details, callback) {
+    let setOptions = function(details, callback) {
         if ( typeof details !== 'object' || details === null ) {
             return;
         }

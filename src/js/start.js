@@ -29,7 +29,7 @@
 
 /******************************************************************************/
 
-var µb = µBlock;
+const µb = µBlock;
 
 /******************************************************************************/
 
@@ -42,21 +42,8 @@ vAPI.app.onShutdown = function() {
     µb.permanentFirewall.reset();
     µb.sessionURLFiltering.reset();
     µb.permanentURLFiltering.reset();
-    µb.hnSwitches.reset();
-};
-
-/******************************************************************************/
-
-var processCallbackQueue = function(queue, callback) {
-    var processOne = function() {
-        var fn = queue.pop();
-        if ( fn ) {
-            fn(processOne);
-        } else if ( typeof callback === 'function' ) {
-            callback();
-        }
-    };
-    processOne();
+    µb.sessionSwitches.reset();
+    µb.permanentSwitches.reset();
 };
 
 /******************************************************************************/
@@ -66,6 +53,9 @@ var processCallbackQueue = function(queue, callback) {
 // - Schedule next update operation.
 
 var onAllReady = function() {
+    µb.webRequest.start();
+    initializeTabs();
+
     // https://github.com/chrisaljoudi/uBlock/issues/184
     // Check for updates not too far in the future.
     µb.assets.addObserver(µb.assetObserver.bind(µb));
@@ -83,8 +73,55 @@ var onAllReady = function() {
 
     µb.contextMenu.update(null);
     µb.firstInstall = false;
+};
 
-    processCallbackQueue(µb.onStartCompletedQueue);
+/******************************************************************************/
+
+// This is called only once, when everything has been loaded in memory after
+// the extension was launched. It can be used to inject content scripts
+// in already opened web pages, to remove whatever nuisance could make it to
+// the web pages before uBlock was ready.
+
+let initializeTabs = function() {
+    let handleScriptResponse = function(tabId, results) {
+        if (
+            Array.isArray(results) === false ||
+            results.length === 0 ||
+            results[0] !== true
+        ) {
+            return;
+        }
+        // Inject dclarative content scripts programmatically.
+        let manifest = chrome.runtime.getManifest();
+        if ( manifest instanceof Object === false ) { return; }
+        for ( let contentScript of manifest.content_scripts ) {
+            for ( let file of contentScript.js ) {
+                vAPI.tabs.injectScript(tabId, {
+                    file: file,
+                    allFrames: contentScript.all_frames,
+                    runAt: contentScript.run_at
+                });
+            }
+        }
+    };
+    let bindToTabs = function(tabs) {
+        for ( let tab of tabs  ) {
+            µb.tabContextManager.commit(tab.id, tab.url);
+            µb.bindTabToPageStats(tab.id);
+            // https://github.com/chrisaljoudi/uBlock/issues/129
+            //   Find out whether content scripts need to be injected
+            //   programmatically. This may be necessary for web pages which
+            //   were loaded before uBO launched.
+            if ( /^https?:\/\//.test(tab.url) === false ) { continue; }
+            vAPI.tabs.injectScript(
+                tab.id,
+                { file: 'js/scriptlets/should-inject-contentscript.js' },
+                handleScriptResponse.bind(null, tab.id)
+            );
+        }
+    };
+
+    browser.tabs.query({ url: '<all_urls>' }, bindToTabs);
 };
 
 /******************************************************************************/
@@ -124,51 +161,49 @@ var onVersionReady = function(lastVersion) {
     // release. This will be done only for release versions of Firefox.
     if (
         vAPI.webextFlavor.soup.has('firefox') &&
-        /(b|rc)\d+$/.test(vAPI.app.version) === false
+        vAPI.webextFlavor.soup.has('devbuild') === false
     ) {
         µb.redirectEngine.invalidateResourcesSelfie();
     }
 
-    // From 1.15.19b9 and above, the `behind-the-scene` scope is no longer
-    // whitelisted by default, and network requests from that scope will be
-    // subject to filtering by default.
-    //
-    // Following code is to remove the `behind-the-scene` scope when updating
-    // from a version older than 1.15.19b9.
-    // This will apply only to webext versions of uBO, as the following would
-    // certainly cause too much breakage in Firefox legacy given that uBO can
-    // see ALL network requests.
-    // Remove when everybody is beyond 1.15.19b8.
-    (function patch1015019008(s) {
-        if ( vAPI.firefox !== undefined ) { return; }
-        var match = /^(\d+)\.(\d+)\.(\d+)(?:\D+(\d+))?/.exec(s);
-        if ( match === null ) { return; }
-        var v =
-            parseInt(match[1], 10) * 1000 * 1000 * 1000 +
-            parseInt(match[2], 10) * 1000 * 1000 +
-            parseInt(match[3], 10) * 1000 +
-            (match[4] ? parseInt(match[4], 10) : 0);
-        if ( /rc\d+$/.test(s) ) { v += 100; }
-        if ( v > 1015019008 ) { return; }
-        if ( µb.getNetFilteringSwitch('http://behind-the-scene/') ) { return; }
-        var fwRules = [
-            'behind-the-scene * * noop',
-            'behind-the-scene * image noop',
-            'behind-the-scene * 3p noop',
-            'behind-the-scene * inline-script noop',
-            'behind-the-scene * 1p-script noop',
-            'behind-the-scene * 3p-script noop',
-            'behind-the-scene * 3p-frame noop'
-        ].join('\n');
-        µb.sessionFirewall.fromString(fwRules, true);
-        µb.permanentFirewall.fromString(fwRules, true);
-        µb.savePermanentFirewallRules();
-        µb.hnSwitches.fromString([
-            'no-large-media: behind-the-scene false'
-        ].join('\n'), true);
+    // If unused, just comment out for when we need to compare versions in the
+    // future.
+    let intFromVersion = function(s) {
+        let parts = s.match(/(?:^|\.|b|rc)\d+/g);
+        if ( parts === null ) { return 0; }
+        let vint = 0;
+        for ( let i = 0; i < 4; i++ ) {
+            let pstr = parts[i] || '';
+            let pint;
+            if ( pstr === '' ) {
+                pint = 0;
+            } else if ( pstr.startsWith('.') || pstr.startsWith('b') ) {
+                pint = parseInt(pstr.slice(1), 10);
+            } else if ( pstr.startsWith('rc') ) {
+                pint = parseInt(pstr.slice(2), 10) + 100;
+            } else {
+                pint = parseInt(pstr, 10);
+            }
+            vint = vint * 1000 + pint;
+        }
+        return vint;
+    };
+
+    let lastVersionInt = intFromVersion(lastVersion);
+
+    if ( lastVersionInt <= 1016021007 ) {
+        µb.sessionSwitches.toggle('no-scripting', 'behind-the-scene', 2);
+        µb.permanentSwitches.toggle('no-scripting', 'behind-the-scene', 2);
         µb.saveHostnameSwitches();
-        µb.toggleNetFilteringSwitch('http://behind-the-scene/', '', true);
-    })(lastVersion);
+    }
+
+    // https://github.com/uBlockOrigin/uBlock-issues/issues/212#issuecomment-419741324
+    if ( lastVersionInt <= 1015024000 ) {
+        if ( µb.hiddenSettings.manualUpdateAssetFetchPeriod === 2000 ) {
+            µb.hiddenSettings.manualUpdateAssetFetchPeriod = 500;
+            µb.saveHiddenSettings();
+        }
+    }
 
     vAPI.storage.set({ version: vAPI.app.version });
 };
@@ -206,7 +241,8 @@ var onUserSettingsReady = function(fetched) {
     µb.sessionFirewall.assign(µb.permanentFirewall);
     µb.permanentURLFiltering.fromString(fetched.urlFilteringString);
     µb.sessionURLFiltering.assign(µb.permanentURLFiltering);
-    µb.hnSwitches.fromString(fetched.hostnameSwitchesString);
+    µb.permanentSwitches.fromString(fetched.hostnameSwitchesString);
+    µb.sessionSwitches.assign(µb.permanentSwitches);
 
     // https://github.com/gorhill/uBlock/issues/1892
     // For first installation on a battery-powered device, disable generic
@@ -251,7 +287,12 @@ var onFirstFetchReady = function(fetched) {
     onVersionReady(fetched.version);
     onCommandShortcutsReady(fetched.commandShortcuts);
 
-    µb.loadPublicSuffixList(onPSLReady);
+    Promise.all([
+        µb.loadPublicSuffixList(),
+        µb.staticNetFilteringEngine.readyToUse()
+    ]).then(( ) => {
+        onPSLReady();
+    });
     µb.loadRedirectResources();
 };
 
@@ -283,7 +324,7 @@ var fromFetch = function(to, fetched) {
 var onSelectedFilterListsLoaded = function() {
     var fetchableProps = {
         'commandShortcuts': [],
-        'compiledMagic': '',
+        'compiledMagic': 0,
         'dynamicFilteringString': [
             'behind-the-scene * * noop',
             'behind-the-scene * image noop',
@@ -295,14 +336,15 @@ var onSelectedFilterListsLoaded = function() {
         ].join('\n'),
         'urlFilteringString': '',
         'hostnameSwitchesString': [
-            'no-large-media: behind-the-scene false'
+            'no-large-media: behind-the-scene false',
+            'no-scripting: behind-the-scene false'
         ].join('\n'),
         'lastRestoreFile': '',
         'lastRestoreTime': 0,
         'lastBackupFile': '',
         'lastBackupTime': 0,
         'netWhitelist': µb.netWhitelistDefault,
-        'selfieMagic': '',
+        'selfieMagic': 0,
         'version': '0.0.0.0'
     };
 
@@ -328,10 +370,8 @@ var onAdminSettingsRestored = function() {
 /******************************************************************************/
 
 return function() {
-    processCallbackQueue(µb.onBeforeStartQueue, function() {
-        // https://github.com/gorhill/uBlock/issues/531
-        µb.restoreAdminSettings(onAdminSettingsRestored);
-    });
+    // https://github.com/gorhill/uBlock/issues/531
+    µb.restoreAdminSettings(onAdminSettingsRestored);
 };
 
 /******************************************************************************/
