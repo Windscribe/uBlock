@@ -49,6 +49,11 @@ if ( typeof vAPI !== 'object' ) {
 /******************************************************************************/
 
 var onMaybeAbpLinkClicked = function(ev) {
+    /* Check if the advanced feature flag is enabled */
+    if (window.store && window.store.getState().advancedModeEnabled === false) {
+        return;
+    }
+
     if ( ev.button !== 0 ) {
         return;
     }
@@ -62,6 +67,7 @@ var onMaybeAbpLinkClicked = function(ev) {
     ) {
         return;
     }
+
     var href = target.href || '';
     if ( href === '' ) {
         return;
