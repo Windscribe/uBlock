@@ -50,7 +50,7 @@ if ( typeof vAPI !== 'object' ) {
 
 var onMaybeAbpLinkClicked = function(ev) {
     /* Check if the advanced feature flag is enabled */
-    if (window.store && window.store.getState().advancedModeEnabled === false) {
+    if (window.store && !window.store.getState().advancedModeEnabled) {
         return;
     }
 
