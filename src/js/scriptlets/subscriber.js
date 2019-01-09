@@ -48,68 +48,84 @@ if ( typeof vAPI !== 'object' ) {
 
 /******************************************************************************/
 
-var onMaybeAbpLinkClicked = function(ev) {
+ var handleAbpLinkClicked = function(advancedModeEnabled, ev) {
     /* Check if the advanced feature flag is enabled */
-    if (window.store && !window.store.getState().advancedModeEnabled) {
-        return;
+    if (!advancedModeEnabled) {
+      return
     }
-
-    if ( ev.button !== 0 ) {
-        return;
+    if (ev.button !== 0) {
+      return
     }
     // This addresses https://github.com/easylist/EasyListHebrew/issues/89
     // Also, as per feedback to original fix:
     // https://github.com/gorhill/uBlock/commit/99a3d9631047d33dc7a454296ab3dd0a1e91d6f1
-    var target = ev.target;
+    var target = ev.target
     if (
-        ev.isTrusted === false ||
-        target instanceof HTMLAnchorElement === false
+      ev.isTrusted === false ||
+      target instanceof HTMLAnchorElement === false
     ) {
-        return;
+      return
     }
 
-    var href = target.href || '';
-    if ( href === '' ) {
-        return;
+    var href = target.href || ''
+    if (href === '') {
+      return
     }
-    var matches = /^(?:abp|ubo):\/*subscribe\/*\?location=([^&]+).*title=([^&]+)/.exec(href);
-    if ( matches === null ) {
-        matches = /^https?:\/\/.*?[&?]location=([^&]+).*?&title=([^&]+)/.exec(href);
-        if ( matches === null ) { return; }
+    var matches = /^(?:abp|ubo):\/*subscribe\/*\?location=([^&]+).*title=([^&]+)/.exec(
+      href,
+    )
+    if (matches === null) {
+      matches = /^https?:\/\/.*?[&?]location=([^&]+).*?&title=([^&]+)/.exec(
+        href,
+      )
+      if (matches === null) {
+        return
+      }
     }
 
-    var location = decodeURIComponent(matches[1]);
-    var title = decodeURIComponent(matches[2]);
-    var messaging = vAPI.messaging;
+    var location = decodeURIComponent(matches[1])
+    var title = decodeURIComponent(matches[2])
+    var messaging = vAPI.messaging
 
-    ev.stopPropagation();
-    ev.preventDefault();
+    ev.stopPropagation()
+    ev.preventDefault()
 
     var onListsSelectionDone = function() {
-        messaging.send('scriptlets', { what: 'reloadAllFilters' });
-    };
+      messaging.send('scriptlets', { what: 'reloadAllFilters' })
+    }
 
     var onSubscriberDataReady = function(details) {
-        var confirmStr = details.confirmStr
-                            .replace('{{url}}', location)
-                            .replace('{{title}}', title);
-        if ( !window.confirm(confirmStr) ) { return; }
-        messaging.send(
-            'scriptlets',
-            {
-                what: 'applyFilterListSelection',
-                toImport: location
-            },
-            onListsSelectionDone
-        );
-    };
+      var confirmStr = details.confirmStr
+        .replace('{{url}}', location)
+        .replace('{{title}}', title)
+      if (!window.confirm(confirmStr)) {
+        return
+      }
+      messaging.send(
+        'scriptlets',
+        {
+          what: 'applyFilterListSelection',
+          toImport: location,
+        },
+        onListsSelectionDone,
+      )
+    }
 
     messaging.send(
-        'scriptlets',
-        { what: 'subscriberData' },
-        onSubscriberDataReady
-    );
-};
+      'scriptlets',
+      { what: 'subscriberData' },
+      onSubscriberDataReady,
+    )
+  }
+
+  var onMaybeAbpLinkClicked = function(ev) {
+    browser.runtime
+      .sendMessage({
+        type: 'get-state',
+        payload: 'advancedModeEnabled',
+      })
+      .then(result => handleAbpLinkClicked(result, ev))
+  }
 
 /******************************************************************************/
 
