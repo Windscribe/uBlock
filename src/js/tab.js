@@ -947,7 +947,7 @@ vAPI.tabs.registerListeners();
 
         // TODO: use ads blocked # for WS badge
         //  vAPI.setIcon(tabId, state, badge, parts);
-        if (window.store) {
+        if (window.store && pageStore.perLoadBlockedRequestCount) {
           window.store.dispatch(window.actions.tabs.produce(state => {
             if (state[tabId]) {
                 state[tabId].adsBlocked = pageStore.perLoadBlockedRequestCount
