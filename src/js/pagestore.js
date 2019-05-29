@@ -284,12 +284,12 @@ PageStore.prototype.init = function(tabId, context) {
     //   initialized.
     // - If it has been initialized, we do not want to change the state
     //   of the current context.
-    const fctxt = µb.logger.enabled
-        ? µBlock.filteringContext
+    const fctxt = 
+        µBlock.filteringContext
                 .duplicate()
                 .fromTabId(tabId)
-                .setURL(tabContext.rawURL)
-        : undefined;
+                .setURL(tabContext.rawURL);
+        
 
     // https://github.com/uBlockOrigin/uBlock-issues/issues/314
     const masterSwitch = tabContext.getNetFilteringSwitch();
@@ -301,7 +301,6 @@ PageStore.prototype.init = function(tabId, context) {
     if (
         masterSwitch &&
         this.noCosmeticFiltering &&
-        µb.logger.enabled &&
         context === 'tabCommitted'
     ) {
         fctxt.setRealm('cosmetic')
@@ -321,7 +320,6 @@ PageStore.prototype.init = function(tabId, context) {
             this.noGenericCosmeticFiltering = result === 2;
             if (
                 result !== 0 &&
-                µb.logger.enabled &&
                 context === 'tabCommitted'
             ) {
                 fctxt.setRealm('network')
@@ -589,7 +587,7 @@ PageStore.prototype.filterRequest = function(fctxt) {
         fctxt.url,
         requestType
     );
-    if ( result !== 0 && µb.logger.enabled ) {
+    if ( result !== 0 ) {
         fctxt.filter = µb.sessionURLFiltering.toLogData();
     }
 
@@ -600,7 +598,7 @@ PageStore.prototype.filterRequest = function(fctxt) {
             fctxt.getHostname(),
             requestType
         );
-        if ( result !== 0 && result !== 3 && µb.logger.enabled ) {
+        if ( result !== 0 && result !== 3 ) {
             fctxt.filter = µb.sessionFirewall.toLogData();
         }
     }
@@ -608,7 +606,7 @@ PageStore.prototype.filterRequest = function(fctxt) {
     // Static filtering has lowest precedence.
     if ( result === 0 || result === 3 ) {
         result = µb.staticNetFilteringEngine.matchString(fctxt);
-        if ( result !== 0 && µb.logger.enabled ) {
+        if ( result !== 0 ) {
             fctxt.filter = µb.staticNetFilteringEngine.toLogData();
         }
     }
@@ -642,9 +640,9 @@ PageStore.prototype.filterCSPReport = function(fctxt) {
             fctxt.getHostname()
         )
     ) {
-        if ( µb.logger.enabled ) {
-            fctxt.filter = µb.sessionSwitches.toLogData();
-        }
+       
+        fctxt.filter = µb.sessionSwitches.toLogData();
+       
         return 1;
     }
     return 0;
@@ -662,9 +660,9 @@ PageStore.prototype.filterFont = function(fctxt) {
             fctxt.getTabHostname()
         ) !== false
     ) {
-        if ( µb.logger.enabled ) {
-            fctxt.filter = µb.sessionSwitches.toLogData();
-        }
+        
+        fctxt.filter = µb.sessionSwitches.toLogData();
+        
         return 1;
     }
     return 0;
@@ -686,9 +684,9 @@ PageStore.prototype.filterScripting = function(fctxt, netFiltering) {
     ) {
         return 0;
     }
-    if ( µb.logger.enabled ) {
-        fctxt.filter = µb.sessionSwitches.toLogData();
-    }
+    
+    fctxt.filter = µb.sessionSwitches.toLogData();
+    
     return 1;
 };
 
@@ -722,9 +720,9 @@ PageStore.prototype.filterLargeMediaElement = function(fctxt, size) {
         }, 500);
     }
 
-    if ( µb.logger.enabled ) {
-        fctxt.filter = µb.sessionSwitches.toLogData();
-    }
+    
+    fctxt.filter = µb.sessionSwitches.toLogData();
+    
 
     return 1;
 };

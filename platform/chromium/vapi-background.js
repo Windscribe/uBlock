@@ -1005,7 +1005,7 @@ vAPI.messaging.onPortDisconnect = function(port) {
 /******************************************************************************/
 
 vAPI.messaging.onPortConnect = function(port) {
-    port.onDisconnect.addListener(this.onPortDisconnect);
+    // port.onDisconnect.addListener(this.onPortDisconnect);
     port.onMessage.addListener(this.onPortMessage);
     this.ports.set(port.name, port);
 }.bind(vAPI.messaging);

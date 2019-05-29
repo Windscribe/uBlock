@@ -135,7 +135,7 @@ let initializeTabs = function() {
         }
     };
 
-    browser.tabs.query({ url: '<all_urls>' }, bindToTabs);
+    browser.tabs.query({ url: '<all_urls>' }).then(bindToTabs);
 };
 
 /******************************************************************************/
