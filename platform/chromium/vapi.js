@@ -19,7 +19,7 @@
     Home: https://github.com/gorhill/uBlock
 */
 
-'use strict';
+"use strict";
 
 /* global HTMLDocument, XMLDocument */
 
@@ -27,11 +27,12 @@
 
 /******************************************************************************/
 
-if ( self.browser instanceof Object ) {
-    self.chrome = self.browser;
-} else {
-    self.browser = self.chrome;
-}
+// This line is conflicting with the browser polyfill. I don't think we need it.
+// if ( self.browser instanceof Object ) {
+//     self.chrome = self.browser;
+// } else {
+//     self.browser = self.chrome;
+// }
 
 /******************************************************************************/
 
@@ -50,23 +51,14 @@ var vAPI = window.vAPI; // jshint ignore:line
 //   Skip text/plain documents.
 
 if (
-    (document instanceof HTMLDocument ||
-      document instanceof XMLDocument &&
-      document.createElement('div') instanceof HTMLDivElement
-    ) &&
-    (/^image\/|^text\/plain/.test(document.contentType || '') === false)
+  (document instanceof HTMLDocument ||
+    (document instanceof XMLDocument &&
+      document.createElement("div") instanceof HTMLDivElement)) &&
+  /^image\/|^text\/plain/.test(document.contentType || "") === false
 ) {
-    vAPI = window.vAPI = vAPI instanceof Object && vAPI.uBO === true
-        ? vAPI
-        : { uBO: true };
+  vAPI = window.vAPI =
+    vAPI instanceof Object && vAPI.uBO === true ? vAPI : { uBO: true };
 }
-
-
-
-
-
-
-
 
 /*******************************************************************************
 
